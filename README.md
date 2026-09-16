@@ -2,6 +2,8 @@
 
 *Your first real life. Try not to go broke.*
 
+**Live:** https://irl-money.vercel.app · Teacher mode: https://irl-money.vercel.app/teacher
+
 A financial-life simulation for middle-school students. You get a paycheck, life arrives through a fictional phone (texts, bank alerts, drops, bills), and every choice has an immediate effect and often a delayed one. Nobody says "wrong answer" — the month just plays out.
 
 ## Run it
