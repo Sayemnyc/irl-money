@@ -5,7 +5,7 @@ import type { Deltas } from "@/engine/types";
  * ponytail: swap `open()` for a Supabase Realtime channel (same message shapes) to go cross-device.
  */
 export type Difficulty = "gentle" | "standard" | "tough";
-export type RoomConfig = { code: string; minutes: number; difficulty: Difficulty; scenario: "first-paycheck" };
+export type RoomConfig = { code: string; minutes: number; difficulty: Difficulty; scenario: "first-paycheck"; /** ms epoch; drives the teacher's class clock */ startedAt: number };
 
 export type Metrics = { checking: number; savings: number; debt: number; credit: number; life: number; day: number };
 
