@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Pause, Play, Radio, Sparkles, Users, X, Zap } from "lucide-react";
 import { scenarios } from "@/content/scenarios";
@@ -9,7 +9,7 @@ import { money } from "@/engine/finance";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/lib/format";
 
-type Live = { name: string; metrics?: Metrics; current?: string | null; phase?: string; decisions: Record<string, string> };
+type Live = { id: string; name: string; metrics?: Metrics; current?: string | null; phase?: string; decisions: Record<string, string> };
 
 const dayOf = (s: (typeof scenarios)[number]) => (s.when && "day" in s.when ? s.when.day : s.when ? s.when.between[0] : 99);
 const timeline = scenarios.filter((s) => s.choices.length > 0 && s.when).sort((a, b) => dayOf(a) - dayOf(b));
@@ -26,6 +26,7 @@ export function TeacherDashboard() {
   const [config, setConfig] = useState<RoomConfig | null>(null);
   const [setup, setSetup] = useState(false);
   const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false); // read by the room subscription, which outlives renders
   const [live, setLive] = useState<Record<string, Live>>({});
   const [room, setRoom] = useState<Room | null>(null);
   const [twistOpen, setTwistOpen] = useState(false);
@@ -38,17 +39,24 @@ export function TeacherDashboard() {
     room?.close();
     const r = openRoom(cfg.code);
     r.subscribe((m: RoomMessage) => {
-      if (m.type === "hello") { setLive((l) => ({ ...l, [m.student]: l[m.student] ?? { name: m.student, decisions: {} } })); r.send({ type: "config", config: cfg }); }
-      if (m.type === "metrics") setLive((l) => ({ ...l, [m.student]: { ...(l[m.student] ?? { name: m.student, decisions: {} }), metrics: m.metrics, current: m.current, phase: m.phase } }));
+      if (m.type !== "hello" && m.type !== "metrics" && m.type !== "decision") return;
+      const upd = (fn: (s: Live) => Live) => setLive((l) => ({ ...l, [m.id]: fn({ ...(l[m.id] ?? { decisions: {} }), id: m.id, name: m.student }) }));
+      if (m.type === "hello") {
+        upd((s) => s);
+        r.send({ type: "config", config: cfg });
+        // Late joiners and reloads must land in the class's current pause state.
+        r.send({ type: "pause", paused: pausedRef.current });
+      }
+      if (m.type === "metrics") upd((s) => ({ ...s, metrics: m.metrics, current: m.current, phase: m.phase }));
       if (m.type === "decision") {
-        setLive((l) => ({ ...l, [m.student]: { ...(l[m.student] ?? { name: m.student, decisions: {} }), decisions: { ...(l[m.student]?.decisions ?? {}), [m.scenario]: m.choice } } }));
+        upd((s) => ({ ...s, decisions: { ...s.decisions, [m.scenario]: m.choice } }));
         const i = timeline.findIndex((t) => t.id === m.scenario);
         if (i >= 0) setFocus(i);
       }
     });
     setRoom(r); setConfig(cfg); setSetup(false); setLive({});
   };
-  const togglePause = () => { const p = !paused; setPaused(p); room?.send({ type: "pause", paused: p }); };
+  const togglePause = () => { const p = !paused; setPaused(p); pausedRef.current = p; room?.send({ type: "pause", paused: p }); };
   const sendTwist = (id: string) => { room?.send({ type: "twist", scenario: id }); setTwistOpen(false); const i = timeline.findIndex((t) => t.id === id); if (i >= 0) setFocus(i); };
 
   const liveList = Object.values(live);
@@ -179,8 +187,8 @@ export function TeacherDashboard() {
         <aside className="rounded-3xl bg-surface border border-line p-5 h-fit lg:sticky lg:top-22">
           <div className="flex items-center justify-between"><h2 className="font-semibold">Class</h2><span className="text-xs text-muted">{hasLive ? `${liveList.length} live` : "24 demo"}</span></div>
           <ul className="mt-3 divide-y divide-line max-h-[60dvh] overflow-y-auto scrollbar-none">
-            {(hasLive ? liveList.map((l) => ({ name: l.name, m: l.metrics, live: true, done: l.phase === "results" })) : demo.map((d) => ({ name: d.name, m: d.state, live: false, done: true }))).map((s) => (
-              <li key={s.name} className="py-2.5 flex items-center gap-3">
+            {(hasLive ? liveList.map((l) => ({ id: l.id, name: l.name, m: l.metrics, live: true, done: l.phase === "results" })) : demo.map((d) => ({ id: d.name, name: d.name, m: d.state, live: false, done: true }))).map((s) => (
+              <li key={s.id} className="py-2.5 flex items-center gap-3">
                 <span className={cx("w-2 h-2 rounded-full shrink-0", s.live ? "bg-money" : "bg-muted/40")} aria-hidden />
                 <span className="text-sm font-medium w-16 truncate">{s.name}</span>
                 {s.m ? (

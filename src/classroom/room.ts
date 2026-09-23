@@ -10,10 +10,11 @@ export type RoomConfig = { code: string; minutes: number; difficulty: Difficulty
 export type Metrics = { checking: number; savings: number; debt: number; credit: number; life: number; day: number };
 
 export type RoomMessage =
-  | { type: "hello"; student: string }
+  // `id` is a per-device random id; `student` is the display name (not unique).
+  | { type: "hello"; id: string; student: string }
   | { type: "config"; config: RoomConfig }
-  | { type: "decision"; student: string; scenario: string; choice: string; label: string; day: number; deltas: Deltas }
-  | { type: "metrics"; student: string; metrics: Metrics; current: string | null; phase: "playing" | "results" }
+  | { type: "decision"; id: string; student: string; scenario: string; choice: string; label: string; day: number; deltas: Deltas }
+  | { type: "metrics"; id: string; student: string; metrics: Metrics; current: string | null; phase: "playing" | "results" }
   | { type: "pause"; paused: boolean }
   | { type: "twist"; scenario: string };
 
@@ -33,5 +34,6 @@ export function openRoom(code: string): Room {
   };
 }
 
+export const makeStudentId = () => Math.random().toString(36).slice(2, 10);
 export const makeRoomCode = () => `MNY-${Math.floor(1000 + Math.random() * 9000)}`;
 export const startingChecking: Record<Difficulty, number> = { gentle: 180, standard: 60, tough: 0 };

@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import { act, choose, indexContent, newGame, nextEvent } from "@/engine/engine";
 import type { AppId, GameState } from "@/engine/types";
 import { scenarios } from "@/content/scenarios";
-import { openRoom, startingChecking, type Difficulty, type Room } from "@/classroom/room";
+import { makeStudentId, openRoom, startingChecking, type Difficulty, type Room } from "@/classroom/room";
 import { sounds, type SoundName } from "@/lib/sound";
 
 export const content = indexContent(scenarios);
@@ -13,6 +13,8 @@ export type View = "event" | "home" | AppId;
 type Store = {
   game: GameState | null;
   name: string;
+  /** Stable per-device id so two students with the same name stay separate in the roster. */
+  studentId: string;
   avatar: number;
   view: View;
   thread: string | null;
@@ -45,7 +47,7 @@ export const useGame = create<Store>()(
       const broadcast = (g: GameState) => {
         if (!room) return;
         const { checking, savings, debt, credit, life, day } = g;
-        room.send({ type: "metrics", student: get().name, metrics: { checking, savings, debt, credit, life, day }, current: g.current, phase: g.phase });
+        room.send({ type: "metrics", id: get().studentId, student: get().name, metrics: { checking, savings, debt, credit, life, day }, current: g.current, phase: g.phase });
       };
       const arrive = (g: GameState) => {
         const sc = g.current ? content.byId[g.current] : null;
@@ -58,11 +60,11 @@ export const useGame = create<Store>()(
         arrive(nextEvent(content, { ...g, checking: startingChecking[get().difficulty] }));
       };
       return {
-        game: null, name: "", avatar: 0, view: "event", thread: null, dayChanged: true, muted: false, paused: false, roomCode: null, difficulty: "standard",
+        game: null, name: "", studentId: makeStudentId(), avatar: 0, view: "event", thread: null, dayChanged: true, muted: false, paused: false, roomCode: null, difficulty: "standard",
         start: (name, avatar) => {
           sounds.unlock();
           set({ name: name.trim() || "You", avatar });
-          room?.send({ type: "hello", student: get().name });
+          room?.send({ type: "hello", id: get().studentId, student: get().name });
           begin(Math.floor(Math.random() * 1e9));
         },
         choose: (choiceId) => {
@@ -72,7 +74,7 @@ export const useGame = create<Store>()(
           if (n === g) return;
           play("tap");
           const d = n.decisions.at(-1)!;
-          room?.send({ type: "decision", student: get().name, scenario: d.scenario, choice: d.choice, label: d.label, day: d.day, deltas: d.deltas });
+          room?.send({ type: "decision", id: get().studentId, student: get().name, scenario: d.scenario, choice: d.choice, label: d.label, day: d.day, deltas: d.deltas });
           set({ game: n });
         },
         next: () => {
@@ -103,12 +105,12 @@ export const useGame = create<Store>()(
             if (m.type === "config") set({ difficulty: m.config.difficulty });
             if (m.type === "twist") get().twist(m.scenario);
           });
-          if (get().name) room.send({ type: "hello", student: get().name });
+          if (get().name) room.send({ type: "hello", id: get().studentId, student: get().name });
         },
-        // A class-wide plot twist lands as the very next event.
+        // A class-wide plot twist lands as the very next event — unless this student already lived it.
         twist: (scenario) => {
           const g = get().game;
-          if (!g || g.phase !== "playing" || !content.byId[scenario]) return;
+          if (!g || g.phase !== "playing" || !content.byId[scenario] || g.seen.includes(scenario)) return;
           set({ game: act(g, [{ type: "cancel", scenario }, { type: "schedule", scenario, inDays: 0 }], "Class event") });
         },
         replay: (sameSeed) => {
@@ -120,7 +122,7 @@ export const useGame = create<Store>()(
     },
     {
       name: "irl-money",
-      partialize: (s) => ({ game: s.game, name: s.name, avatar: s.avatar, muted: s.muted, roomCode: s.roomCode, difficulty: s.difficulty }),
+      partialize: (s) => ({ game: s.game, name: s.name, studentId: s.studentId, avatar: s.avatar, muted: s.muted, roomCode: s.roomCode, difficulty: s.difficulty }),
       onRehydrateStorage: () => (s) => { if (s?.roomCode) s.joinRoom(s.roomCode); },
     },
   ),
