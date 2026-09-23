@@ -57,8 +57,9 @@ Open **`/teacher`** (there's a "Teacher mode" link on the start screen). It work
 3. As students play, the dashboard follows the class: the **Now playing** card shows the concept, the learning objective, a **discussion question** big enough for a projector, and the live split of what students chose. The roster on the right shows each student's checking, debt and life.
 4. **Pause class** freezes every student's phone with a "Paused for discussion" screen. Click **Resume** when you're done.
 5. **Plot twist** sends an event to everyone right now — the cracked screen is the classic one: same $160 emergency, wildly different situations. Then ask the discussion question.
-6. Use the timeline chips (D2 Phone bill → D25 Bonus) to jump to any event's teaching notes, before or after students reach it.
-7. **Class insights** ("41% put the emergency repair on credit") and **End-of-month outcomes** are good closers. The demo numbers are fictional; live rooms replace them with real ones.
+6. The clock next to the room code counts down the class length you picked. Reloading the teacher tab keeps the class (same code, roster and pause state); **End class** clears it.
+7. Use the timeline chips (D2 Phone bill → D25 Bonus) to jump to any event's teaching notes, before or after students reach it.
+8. **Class insights** ("41% put the emergency repair on credit") and **End-of-month outcomes** are good closers. The demo numbers are fictional; live rooms replace them with real ones.
 
 A good 20-minute shape: 8 minutes of play → pause at the cracked screen → 5 minutes of discussion → finish the month → compare two students with the same checking balance and different months.
 

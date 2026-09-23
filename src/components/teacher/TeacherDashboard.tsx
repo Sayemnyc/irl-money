@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Pause, Play, Radio, Sparkles, Users, X, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock3, Pause, Play, Radio, Sparkles, Square, Users, X, Zap } from "lucide-react";
 import { scenarios } from "@/content/scenarios";
 import { buildDemoClass } from "@/content/teacherDemo";
 import { makeRoomCode, openRoom, type Difficulty, type Metrics, type Room, type RoomConfig, type RoomMessage } from "@/classroom/room";
@@ -13,6 +13,11 @@ type Live = { id: string; name: string; metrics?: Metrics; current?: string | nu
 
 const dayOf = (s: (typeof scenarios)[number]) => (s.when && "day" in s.when ? s.when.day : s.when ? s.when.between[0] : 99);
 const timeline = scenarios.filter((s) => s.choices.length > 0 && s.when).sort((a, b) => dayOf(a) - dayOf(b));
+// The running class survives a teacher reload: same room code, pause state and roster.
+const SAVE_KEY = "irl-money:teacher";
+type Saved = { config: RoomConfig; paused: boolean; live: Record<string, Live> };
+const loadSaved = (): Saved | null => { try { return JSON.parse(localStorage.getItem(SAVE_KEY) ?? "null"); } catch { return null; } };
+
 const twists = [
   { id: "phone_repair", label: "Cracked screen — $160" },
   { id: "hours_cut", label: "Hours cut at work" },
@@ -34,8 +39,7 @@ export function TeacherDashboard() {
 
   useEffect(() => () => room?.close(), [room]);
 
-  const startClass = (minutes: number, difficulty: Difficulty) => {
-    const cfg: RoomConfig = { code: makeRoomCode(), minutes, difficulty, scenario: "first-paycheck" };
+  const connect = (cfg: RoomConfig, restored?: Saved) => {
     room?.close();
     const r = openRoom(cfg.code);
     r.subscribe((m: RoomMessage) => {
@@ -54,8 +58,33 @@ export function TeacherDashboard() {
         if (i >= 0) setFocus(i);
       }
     });
-    setRoom(r); setConfig(cfg); setSetup(false); setLive({});
+    pausedRef.current = restored?.paused ?? false;
+    setRoom(r); setConfig(cfg); setSetup(false); setLive(restored?.live ?? {}); setPaused(pausedRef.current);
+    return r;
   };
+  const startClass = (minutes: number, difficulty: Difficulty) => connect({ code: makeRoomCode(), minutes, difficulty, scenario: "first-paycheck", startedAt: Date.now() });
+  const endClass = () => {
+    if (!confirm("End this class? The room code and live roster will be cleared.")) return;
+    room?.send({ type: "pause", paused: false });
+    room?.close();
+    try { localStorage.removeItem(SAVE_KEY); } catch {}
+    pausedRef.current = false;
+    setRoom(null); setConfig(null); setLive({}); setPaused(false);
+  };
+
+  // Reconnect to a class that was running before the reload.
+  useEffect(() => {
+    const saved = loadSaved();
+    if (!saved?.config) return;
+    const r = connect(saved.config, saved);
+    return () => r.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
+  useEffect(() => {
+    // ponytail: only write while a class exists; endClass clears it explicitly (a null write would race the restore under StrictMode).
+    if (config) try { localStorage.setItem(SAVE_KEY, JSON.stringify({ config, paused, live } satisfies Saved)); } catch {}
+  }, [config, paused, live]);
+
   const togglePause = () => { const p = !paused; setPaused(p); pausedRef.current = p; room?.send({ type: "pause", paused: p }); };
   const sendTwist = (id: string) => { room?.send({ type: "twist", scenario: id }); setTwistOpen(false); const i = timeline.findIndex((t) => t.id === id); if (i >= 0) setFocus(i); };
 
@@ -95,6 +124,7 @@ export function TeacherDashboard() {
             {config ? (
               <>
                 <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-surface-2 border border-line px-3 h-10 text-sm"><Radio className="w-4 h-4 text-money" /> Room <strong className="tabular tracking-wider">{config.code}</strong> · {liveList.length} live</span>
+                <ClassClock endsAt={config.startedAt + config.minutes * 60_000} />
                 <Button variant={paused ? "primary" : "secondary"} onClick={togglePause}>{paused ? <><Play className="w-4 h-4" /> Resume</> : <><Pause className="w-4 h-4" /> Pause class</>}</Button>
                 <div className="relative">
                   <Button variant="secondary" onClick={() => setTwistOpen((v) => !v)}><Zap className="w-4 h-4" /> Plot twist</Button>
@@ -104,6 +134,7 @@ export function TeacherDashboard() {
                     </div>
                   )}
                 </div>
+                <Button variant="secondary" onClick={endClass} aria-label="End class"><Square className="w-4 h-4" /><span className="hidden lg:inline">End class</span></Button>
               </>
             ) : (
               <Button onClick={() => setSetup(true)}><Users className="w-4 h-4" /> Start class</Button>
@@ -215,6 +246,17 @@ export function TeacherDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+function ClassClock({ endsAt }: { endsAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const left = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  return (
+    <span className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 h-10 text-sm tabular", left ? "bg-surface-2 border-line" : "bg-danger/15 border-danger/40 text-danger")} aria-label={left ? `${Math.ceil(left / 60)} minutes left in class` : "Class time is up"}>
+      <Clock3 className="w-4 h-4" /> {left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Time’s up"}
+    </span>
   );
 }
 
